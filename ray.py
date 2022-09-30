@@ -19,6 +19,9 @@ def dword(d):
     # 4 bytes
     return struct.pack('=l', d)
 
+def reflect(I, N):
+    return (I - N * 2 * (N @ I)).normalize()
+
 class color(object):
     def __init__(self, r, g, b):
         self.r = r
@@ -43,7 +46,26 @@ class color(object):
         g = int(min(255, max(g, 0)))
         b = int(min(255, max(b, 0)))
         return color(r, g, b)
+    
+    # Mult color con color y con float
+    def __add__(self, other):
+        r = self.r
+        g = self.g
+        b = self.b
+        if type(other) == int or type(other) == float:
+            b = self.b + other
+            g = self.g + other
+            r = self.r + other
+        else:
+            b += other.b
+            g += other.g
+            r += other.r
         
+        r = int(min(255, max(r, 0)))
+        g = int(min(255, max(g, 0)))
+        b = int(min(255, max(b, 0)))
+        return color(r, g, b)
+
 
     def to_bytes(self):
         return bytes([self.b, self.g, self.r])
@@ -60,7 +82,7 @@ class Raytracer(object):
         self.current_color = color(255, 255, 255).to_bytes()
         self.density = 1
         self.scene = []
-        self.light = Light(V3(0, 0, 0), 1)
+        self.light = Light(V3(0, 0, 0), 2, color(255, 255, 255))
         self.clear()
 
     def clear(self):
@@ -135,11 +157,18 @@ class Raytracer(object):
 
         if material is None:
             return self.background_color
-        ligth_dir = (self.light.position - intersect.point).normalize()
-        intensity = ligth_dir @ intersect.normal
-        color = material.diffuse * intensity
-        
-        return color.to_bytes()
+        light_dir = (self.light.position - intersect.point).normalize()
+        # Diffuse intensity
+        d_intensity = light_dir @ intersect.normal
+        diffuse = material.diffuse * d_intensity * material.albedo[0]
+
+        # specular
+        light_reflection = reflect(light_dir, intersect.normal)
+        reflection_intensity = max(0, (light_reflection @ direction))
+        spec_intensity = reflection_intensity ** material.spec
+        specular = self.light.c * spec_intensity * material.albedo[1] * self.light.intensity
+
+        return (diffuse + specular).to_bytes()
 
     # Encargada de definir contra qué chocó
     def scene_intersect(self, origin, direction):
@@ -157,14 +186,23 @@ class Raytracer(object):
         
         return material, intersect
 
-red = Material(diffuse=color(255, 0, 0))
-white = Material(diffuse=color(255, 255, 255))
+rubber = Material(diffuse=color(80, 0, 0), albedo=[0.9, 0.1], spec=10)
+ivory = Material(diffuse=color(100, 100, 80), albedo=[0.695, 0.305], spec=50)
+brown = Material(diffuse=color(139, 66, 21), albedo=[0.695, 0.305], spec=50)
+mouth = Material(diffuse=color(249, 226, 212), albedo=[0.695, 0.305], spec=50)
 
 r = Raytracer(800, 600)
-r.light = Light(V3(0, 0, 0), 1)
+# r.light = Light(V3(0, 0, 0), 1, color(255, 255, 255))
 r.scene = [
-    Sphere(V3(2, 0, -16), 2, red),
-    Sphere(V3(-2.8, 0, -10), 2, white)
+    Sphere(V3(0, 1, -10), 2, brown),
+    Sphere(V3(0, -2.1, -10), 1.3, brown),
+    Sphere(V3(-1.6, -5.5, -16), 0.9, brown),
+    Sphere(V3(1.6, -5.5, -16), 0.9, brown),
+    Sphere(V3(-3.1, -0.7, -16), 1.2, brown),
+    Sphere(V3(3.1, -0.7, -16), 1.2, brown),
+    Sphere(V3(-3.1, 4, -16), 1.2, brown),
+    Sphere(V3(3.1, 4, -16), 1.2, brown),
+    Sphere(V3(0, -0.9, -5), 0.3, mouth),
 ]
 r.render()
 r.write('render.bmp')
