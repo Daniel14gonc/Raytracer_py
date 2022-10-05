@@ -7,6 +7,8 @@ from sphere import *
 from material import *
 from light import *
 
+MAX_RECURSION_DEPTH = 3
+
 def char(c):
     # 1 byte
     return struct.pack('=c', c.encode('ascii'))
@@ -78,8 +80,8 @@ class Raytracer(object):
     def __init__(self, width, height):
         self.width = width
         self.height = height
-        self.background_color = color(0, 0, 0).to_bytes()
-        self.current_color = color(255, 255, 255).to_bytes()
+        self.background_color = color(0, 0, 100)
+        self.current_color = color(255, 255, 255)
         self.density = 1
         self.scene = []
         self.light = Light(V3(0, 0, 0), 2, color(255, 255, 255))
@@ -87,7 +89,7 @@ class Raytracer(object):
 
     def clear(self):
         self.framebuffer = [
-            [self.background_color for x in range(self.width)]
+            [self.background_color.to_bytes() for x in range(self.width)]
             for y in range(self.height)
         ]
 
@@ -130,14 +132,12 @@ class Raytracer(object):
 
     def point(self, x, y, c=None):
         if y >= 0 and y < self.height and x >= 0 and x < self.width:
-            self.framebuffer[y][x] = c if c!= None else self.current_color
-
+            self.framebuffer[y][x] = c.to_bytes() if c!= None else self.current_color.to_bytes()
 
     def render(self):
         fov = int(pi/2)
         ar = self.width / self.height
         tana = tan(fov / 2)
-        print(tana)
         for y in range(self.height):
             for x in range(self.width):    
                 r = random.uniform(0, 1)
@@ -152,23 +152,48 @@ class Raytracer(object):
                 
 
     # Encargada de retornar color final
-    def cast_ray(self, origin, direction):
+    def cast_ray(self, origin, direction, recursion = 0):
+        if recursion >= MAX_RECURSION_DEPTH:
+            return self.background_color
+        
         material, intersect = self.scene_intersect(origin, direction)
 
         if material is None:
             return self.background_color
         light_dir = (self.light.position - intersect.point).normalize()
+
+        # reflection
+        reflect_color = color(0, 0, 0)
+        if material.albedo[2] > 0:
+            reverse_direction = direction * -1
+            reflect_dir = reflect(reverse_direction, intersect.normal)
+            reflect_bias = -0.5 if reflect_dir @ intersect.normal <     0 else 0.5
+            reflect_orig = intersect.point + intersect.normal * reflect_bias
+            reflect_color = self.cast_ray(reflect_orig, reflect_dir, recursion + 1)
+        
+        reflection = reflect_color * material.albedo[2]
+
+        shadow_bias = 1.1
+        shadow_orig = intersect.point + intersect.normal * shadow_bias
+        shadow_material, shadow_intersect = self.scene_intersect(shadow_orig, light_dir)
+        shadow_intensity = 1
+
+        if shadow_material:
+            # dentro de sombra 
+            shadow_intensity = 0.5  
         # Diffuse intensity
         d_intensity = light_dir @ intersect.normal
-        diffuse = material.diffuse * d_intensity * material.albedo[0]
-
+        diffuse = material.diffuse * d_intensity * material.albedo[0] * shadow_intensity
+        # print(intersect.normal)
         # specular
         light_reflection = reflect(light_dir, intersect.normal)
         reflection_intensity = max(0, (light_reflection @ direction))
         spec_intensity = reflection_intensity ** material.spec
         specular = self.light.c * spec_intensity * material.albedo[1] * self.light.intensity
 
-        return (diffuse + specular).to_bytes()
+        
+        
+        return (diffuse + specular + reflection)
 
     # Encargada de definir contra qué chocó
     def scene_intersect(self, origin, direction):
@@ -186,13 +211,15 @@ class Raytracer(object):
         
         return material, intersect
 
-rubber = Material(diffuse=color(80, 0, 0), albedo=[0.9, 0.1], spec=10)
-ivory = Material(diffuse=color(100, 100, 80), albedo=[0.695, 0.305], spec=50)
+rubber = Material(diffuse=color(80, 0, 0), albedo=[0.9, 0.1, 0], spec=10)
+ivory = Material(diffuse=color(100, 100, 80), albedo=[0.695, 0.305, 0], spec=50)
 brown = Material(diffuse=color(139, 66, 21), albedo=[0.695, 0.305], spec=50)
 mouth = Material(diffuse=color(249, 226, 212), albedo=[0.695, 0.305], spec=50)
+mirror = Material(diffuse=color(255, 255, 255), albedo=[0, 1, 0.8], spec=1425)
 
 r = Raytracer(800, 600)
 # r.light = Light(V3(0, 0, 0), 1, color(255, 255, 255))
+'''
 r.scene = [
     Sphere(V3(0, 1, -10), 2, brown),
     Sphere(V3(0, -2.1, -10), 1.3, brown),
@@ -203,6 +230,14 @@ r.scene = [
     Sphere(V3(-3.1, 4, -16), 1.2, brown),
     Sphere(V3(3.1, 4, -16), 1.2, brown),
     Sphere(V3(0, -0.9, -5), 0.3, mouth),
+]
+'''
+r.light = Light(V3(-20, 20, 20), 2, color(255, 255, 255))
+r.scene = [
+    Sphere(V3(0, -1.5, -12), 1.5, ivory),
+    # Sphere(V3(-2, -1, -12), 2, mirror),
+    Sphere(V3(1, 1, -8), 1.7, rubber),
+    Sphere(V3(-2, 1, -10), 2, mirror),
 ]
 r.render()
 r.write('render.bmp')

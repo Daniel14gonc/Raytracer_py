@@ -29,6 +29,8 @@ class Sphere(object):
         impact = origin + direction * t0
         normal = (impact - self.center).normalize()
 
+        # print(t0)
+
         return Intersect(
             distance=t0, 
             point=impact,
