@@ -1,52 +1,42 @@
 import numpy 
 import mmap
 import struct
-from math import atan2, pi, acos
+from color import *
+from math import * 
 
-class color(object):
-    def __init__(self, r, g, b):
-        self.r = r
-        self.g = g
-        self.b = b
-
-    # Mult color con color y con float
-    def __mul__(self, other):
-        r = self.r
-        g = self.g
-        b = self.b
-        if type(other) == int or type(other) == float:
-            b = self.b * other
-            g = self.g * other
-            r = self.r * other
-        else:
-            b *= other.b
-            g *= other.g
-            r *= other.r
-        
-        r = int(min(255, max(r, 0)))
-        g = int(min(255, max(g, 0)))
-        b = int(min(255, max(b, 0)))
-        return color(r, g, b)
+class Envmap(object):
+    def __init__(self, path):
+        self.path = './Envmap/' + path
+        self.read()
     
-    # Mult color con color y con float
-    def __add__(self, other):
-        r = self.r
-        g = self.g
-        b = self.b
-        if type(other) == int or type(other) == float:
-            b = self.b + other
-            g = self.g + other
-            r = self.r + other
-        else:
-            b += other.b
-            g += other.g
-            r += other.r
-        
-        r = int(min(255, max(r, 0)))
-        g = int(min(255, max(g, 0)))
-        b = int(min(255, max(b, 0)))
-        return color(r, g, b)
+    def read(self):
+        with open(self.path, "rb") as image:
+            image.seek(10)
+            header_size = struct.unpack("=l", image.read(4))[0]
+            image.seek(18)
+            self.width = struct.unpack("=l", image.read(4))[0]
+            self.height = struct.unpack("=l", image.read(4))[0]
 
+            image.seek(header_size)
+
+            self.pixels = []
+            for y in range(self.height):
+                self.pixels.append([])
+                for x in range(self.width):
+                    b = ord(image.read(1))
+                    g = ord(image.read(1))
+                    r = ord(image.read(1))
+                    self.pixels[y].append(
+                        color(r, g, b)
+                    )
+
+    def get_color(self, direction):
+        direction = direction.normalize()
+        x = int(((atan2(direction.z, direction.x) / (2 * pi)) + 0.5) * self.width) 
+        y = int((acos(direction.y) / pi ) * self.height)
+
+        return self.pixels[-y][x]
+'''
 class Envmap(object):
     def __init__(self, path):
         self.path = path
@@ -69,3 +59,4 @@ class Envmap(object):
         index = (y * self.width + x) * 3
         c = self.pixels[index].astype(numpy.uint8)
         return color(c[2], c[1], c[0])
+'''

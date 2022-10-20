@@ -10,6 +10,7 @@ from light import *
 from plane import *
 from envmap import *
 from cube import *
+from texture import *
 
 MAX_RECURSION_DEPTH = 3
 
@@ -198,6 +199,15 @@ class Raytracer(object):
         if material is None:
             return self.get_background(direction)
 
+        albedo_first_value = material.albedo[0]
+        albedo_second_value = material.albedo[2]
+        albedo_third_value = material.albedo[3]
+        if material.textures:
+            if material.diffuse.r < 250 and material.diffuse.g < 250 and material.diffuse.b < 250:
+                albedo_third_value = 0
+            else:
+                albedo_first_value = 0
+
         light_dir = (self.light.position - intersect.point).normalize()
         
         # Shadow
@@ -213,7 +223,7 @@ class Raytracer(object):
         
         # Diffuse intensity
         d_intensity = light_dir @ intersect.normal
-        diffuse = material.diffuse * d_intensity * material.albedo[0] * shadow_intensity
+        diffuse = material.diffuse * d_intensity * albedo_first_value * shadow_intensity
         
         # specular
         light_reflection = reflect(light_dir, intersect.normal)
@@ -224,22 +234,22 @@ class Raytracer(object):
     
         # reflection
         reflect_color = color(0, 0, 0)
-        if material.albedo[2] > 0:
+        if albedo_second_value > 0:
             reflect_dir = reflect(direction, intersect.normal)
             reflect_bias = -0.5 if reflect_dir @ intersect.normal < 0 else 0.5
             reflect_orig = intersect.point + (intersect.normal * reflect_bias)
             reflect_color = self.cast_ray(reflect_orig, reflect_dir, recursion + 1)
         
-        reflection = reflect_color * material.albedo[2]
+        reflection = reflect_color * albedo_second_value
 
         refract_color = color(0, 0, 0)
-        if material.albedo[3] > 0:
+        if albedo_third_value > 0:
             refract_dir = refract(direction, intersect.normal, material.refractive_index)
             refract_bias = -0.5 if refract_dir @ intersect.normal < 0 else 0.5
             refract_orig = intersect.point + intersect.normal * refract_bias
             refract_color = self.cast_ray(refract_orig, refract_dir, recursion + 1)
         
-        refraction = refract_color * material.albedo[3]
+        refraction = refract_color * albedo_third_value
         
         return (diffuse + specular + reflection + refraction)
 
@@ -257,6 +267,9 @@ class Raytracer(object):
                     material = o.material
                     intersect = object_intersect
         
+        if material and material.textures:
+            material.texture_diffuse(intersect)
+
         return material, intersect
 
 # Agua refractive_index -> 1.3
@@ -267,6 +280,11 @@ brown = Material(diffuse=color(139, 66, 21), albedo=[0.695, 0.305, 0, 0], spec=5
 mouth = Material(diffuse=color(249, 226, 212), albedo=[0.695, 0.305, 0, 0], spec=50)
 mirror = Material(diffuse=color(255, 255, 255), albedo=[0, 1, 0.8, 0], spec=1425)
 glass = Material(diffuse=color(150, 180, 200), albedo=[0, 0.5, 0.1, 0.8], spec=125, refractive_index=1.5)
+cube = Material(diffuse=color(80, 0, 0), albedo=[0.9, 0.1, 0, 0], spec=10, 
+    textures=[ Texture('m2.bmp') if i == 3 else Texture('m1.bmp') for i in range(6)])
+
+cube2 = Material(diffuse=color(150, 180, 200), albedo=[1, 0.5, 0.1, 0.8], spec=125, refractive_index=1, 
+    textures=[ Texture('leaves.bmp') if i == 3 else Texture('leaves.bmp') for i in range(6)])
 
 r = Raytracer(800, 600)
 # r.light = Light(V3(0, 0, 0), 1, color(255, 255, 255))
@@ -283,19 +301,21 @@ r.scene = [
     Sphere(V3(0, -0.9, -5), 0.3, mouth),
 ]
 '''
-r.light = Light(V3(-20, -5, 20), 2, color(255, 255, 255))
+r.light = Light(V3(-20, 20, 20), 2, color(255, 255, 255))
 r.scene = [ 
-    Sphere(V3(0, 2.5, -15), 1.5, ivory),
-    Sphere(V3(0, 0, -5), 0.5, mirror),
+    # Sphere(V3(0, 2.5, -15), 1.5, ivory),
+    # Sphere(V3(0, 0, -5), 0.5, mirror),
     # Sphere(V3(-3, 2.5, -8), 1.7, rubber),
     # Sphere(V3(-2, 1, -7), 2, mirror),
     # Plane(V3(0, 2.5, -6), 2, 2, mirror),
-    Cube(V3(0, -2, -8), 1, rubber),
+    Cube(V3(-2, 2, -8), 1, cube2),
+    Cube(V3(-2, 2, -9), 1, cube2),
+    # Cube(V3(-2, -2, -8), 1, cube),
     # Cube(V3(0, 1, -10), 1, ivory)
 ]
 
-r.envmap = None
-# r.envmap = Envmap('./envmap.bmp')
+# r.envmap = None
+r.envmap = Envmap('./envmap.bmp')
 
 r.render()
 r.write('render.bmp')
